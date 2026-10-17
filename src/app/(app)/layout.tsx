@@ -35,6 +35,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <Link href="/">Appointments</Link>
     <Link href="/doctors">Doctors</Link>
     <Link href="/patients">Patients</Link>
+    <Link href="/payments">Payments</Link>
+    <Link href="/inbox">Inbox</Link>
   </div>
   <span>{user.email}</span>
 </header>

@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react'
 import { Button, Checkbox, Form, Input, Modal, Select, Table, Tag, Typography, message } from 'antd'
 import { savePatient } from './actions'
+import Link from "next/link";
 
 type Patient = {
   id: string
@@ -97,7 +98,7 @@ export default function PatientsTable({ patients }: { patients: Patient[] }) {
         pagination={{ pageSize: 20, hideOnSinglePage: true }}
         locale={{ emptyText: 'No patients yet.' }}
         columns={[
-          { title: 'Name', dataIndex: 'full_name' },
+          { title: 'Name', dataIndex: 'full_name', render: (name: string, r: Patient) => <Link href={`/patients/${r.id}`}>{name}</Link> },          
           { title: 'Phone', dataIndex: 'phone' },
           {
             title: 'Language',
