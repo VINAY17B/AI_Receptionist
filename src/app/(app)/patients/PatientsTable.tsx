@@ -1,8 +1,11 @@
 'use client'
 import { useMemo, useState } from 'react'
-import { Button, Checkbox, Form, Input, Modal, Select, Table, Tag, Typography, message } from 'antd'
+import Link from 'next/link'
+import dayjs from 'dayjs'
+import { Button, Checkbox, Empty, Form, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography, message } from 'antd'
+import { CheckCircleFilled, EditOutlined, HistoryOutlined, MinusCircleOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { savePatient } from './actions'
-import Link from "next/link";
+
 
 type Patient = {
   id: string
@@ -49,19 +52,18 @@ export default function PatientsTable({ patients }: { patients: Patient[] }) {
 
   const openModal = (p: Patient | null) => {
     setEditing(p)
-    form.setFieldsValue(
-      p
-        ? {
-            full_name: p.full_name,
-            phone: p.phone,
-            preferred_language: p.preferred_language,
-            notes: p.notes ?? '',
-            consent: !!p.consent_at,
-          }
-        : { full_name: '', phone: '', preferred_language: 'en', notes: '', consent: false }
-    )
     setOpen(true)
   }
+
+  const initialValues: FormValues = editing
+    ? {
+        full_name: editing.full_name,
+        phone: editing.phone,
+        preferred_language: editing.preferred_language,
+        notes: editing.notes ?? '',
+        consent: !!editing.consent_at,
+      }
+    : { full_name: '', phone: '', preferred_language: 'en', notes: '', consent: false }
 
   const onSave = async () => {
     const values = await form.validateFields()
@@ -75,51 +77,104 @@ export default function PatientsTable({ patients }: { patients: Patient[] }) {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, gap: 16 }}>
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          Patients
-        </Typography.Title>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <Input.Search
+      <div className="page-head">
+        <div>
+          <Typography.Title level={3} style={{ margin: 0 }}>
+            Patients
+          </Typography.Title>
+          <div className="page-sub">
+            {query.trim()
+              ? `${filtered.length} of ${patients.length} patients`
+              : `${patients.length} ${patients.length === 1 ? 'patient' : 'patients'}`}
+          </div>
+        </div>
+        <div className="toolbar">
+          <Input
             allowClear
+            className="search-input"
+            prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
             placeholder="Search name or phone"
-            style={{ width: 260 }}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <Button type="primary" onClick={() => openModal(null)}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal(null)}>
             Add patient
           </Button>
         </div>
       </div>
 
-      <Table<Patient>
-        rowKey="id"
-        dataSource={filtered}
-        pagination={{ pageSize: 20, hideOnSinglePage: true }}
-        locale={{ emptyText: 'No patients yet.' }}
-        columns={[
-          { title: 'Name', dataIndex: 'full_name', render: (name: string, r: Patient) => <Link href={`/patients/${r.id}`}>{name}</Link> },          
-          { title: 'Phone', dataIndex: 'phone' },
-          {
-            title: 'Language',
-            dataIndex: 'preferred_language',
-            render: (v) => LANGUAGES.find((l) => l.value === v)?.label ?? v,
-          },
-          {
-            title: 'Consent',
-            dataIndex: 'consent_at',
-            render: (v) => (v ? <Tag color="green">Given</Tag> : <Tag>Not recorded</Tag>),
-          },
-          {
-            title: '',
-            render: (_, p) => (
-              <Button size="small" onClick={() => openModal(p)}>
-                Edit
-              </Button>
+      <div className="surface">
+        <Table<Patient>
+          rowKey="id"
+          dataSource={filtered}
+          pagination={{ pageSize: 20, hideOnSinglePage: true }}
+          scroll={{ x: 720 }}
+          locale={{
+            emptyText: (
+              <Empty
+                description={query.trim() ? 'No patients match your search' : 'No patients yet'}
+                style={{ padding: '32px 0' }}
+              />
             ),
-          },
-        ]}
-      />
+          }}
+          rowClassName={() => 'row-anim'}
+          onRow={(_, i) => ({ style: { animationDelay: `${Math.min(i ?? 0, 12) * 30}ms` } })}
+          columns={[
+            {
+              title: 'Patient',
+              dataIndex: 'full_name',
+              render: (name: string, r: Patient) => (
+                <div className="patient-cell">
+                  <span className="avatar">{name.charAt(0).toUpperCase()}</span>
+                  <div>
+                    <div className="patient-name">{name}</div>
+                    <div className="patient-phone">{r.phone}</div>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              title: 'Language',
+              dataIndex: 'preferred_language',
+              render: (v: string) => <Tag bordered={false}>{LANGUAGES.find((l) => l.value === v)?.label ?? v}</Tag>,
+            },
+            {
+              title: 'Consent',
+              dataIndex: 'consent_at',
+              render: (v: string | null) =>
+                v ? (
+                  <span className="consent consent-yes">
+                    <CheckCircleFilled /> Given
+                  </span>
+                ) : (
+                  <span className="consent consent-no">
+                    <MinusCircleOutlined /> Not recorded
+                  </span>
+                ),
+            },
+            {
+              title: 'Added',
+              dataIndex: 'created_at',
+              render: (v: string) => <span className="muted-text">{dayjs(v).format('D MMM YYYY')}</span>,
+            },
+           {
+  title: '',
+  width: 110,
+  render: (_, p) => (
+    <Space size={4}>
+      <Tooltip title="View history">
+        <Link href={`/patients/${p.id}`} aria-label={`View history for ${p.full_name}`}>
+          <Button size="small" type="text" icon={<HistoryOutlined />} />
+        </Link>
+      </Tooltip>
+      <Tooltip title="Edit patient">
+        <Button size="small" type="text" icon={<EditOutlined />} onClick={() => openModal(p)} aria-label="Edit patient" />
+      </Tooltip>
+    </Space>
+  ),
+},
+          ]}
+        />
+      </div>
 
       <Modal
         title={editing ? 'Edit patient' : 'Add patient'}
@@ -128,9 +183,10 @@ export default function PatientsTable({ patients }: { patients: Patient[] }) {
         onCancel={() => setOpen(false)}
         confirmLoading={saving}
         okText="Save"
+        centered
         destroyOnHidden
       >
-        <Form form={form} layout="vertical" preserve={false}>
+        <Form form={form} layout="vertical" preserve={false} initialValues={initialValues}>
           <Form.Item name="full_name" label="Full name" rules={[{ required: true, message: 'Enter the patient name' }]}>
             <Input />
           </Form.Item>

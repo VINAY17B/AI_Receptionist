@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import Link from 'next/link'
+import NavLinks from './NavLinks'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -21,26 +21,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div>
-<header
-  style={{
-    padding: '12px 24px',
-    borderBottom: '1px solid #eee',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  }}
->
-  <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-    <strong>{clinicName}</strong>
-    <Link href="/">Appointments</Link>
-    <Link href="/doctors">Doctors</Link>
-    <Link href="/patients">Patients</Link>
-    <Link href="/payments">Payments</Link>
-    <Link href="/inbox">Inbox</Link>
-  </div>
-  <span>{user.email}</span>
-</header>
-      <main style={{ padding: 24 }}>{children}</main>
+      <header className="app-header">
+        <div className="app-header-inner">
+          <div className="brand">
+            <span className="brand-mark">{clinicName.charAt(0).toUpperCase()}</span>
+            <span className="brand-name">{clinicName}</span>
+          </div>
+          <NavLinks />
+          {/* TODO: add a sign-out action to this chip once a signOut server action exists */}
+          <div className="user-chip" title={user.email ?? ''}>
+            <span className="avatar">{(user.email ?? '?').charAt(0).toUpperCase()}</span>
+            <span className="user-email">{user.email}</span>
+          </div>
+        </div>
+      </header>
+      <main className="app-main">{children}</main>
     </div>
   )
 }

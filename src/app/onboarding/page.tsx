@@ -1,7 +1,8 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Card, Form, Input, Typography, message } from 'antd'
+import { Button, Form, Input, Typography, message } from 'antd'
+import { MedicineBoxOutlined } from '@ant-design/icons'
 import { createClient } from '@/lib/supabase/client'
 
 export default function OnboardingPage() {
@@ -19,18 +20,26 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
-      <Card style={{ width: 360 }}>
-        <Typography.Title level={4}>Set up your clinic</Typography.Title>
-        <Form layout="vertical" onFinish={onFinish}>
-          <Form.Item name="name" label="Clinic name" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Button type="primary" htmlType="submit" block loading={loading}>
-            Continue
-          </Button>
-        </Form>
-      </Card>
+    <div className="auth-shell auth-solo">
+      <main className="auth-pane">
+        <div className="auth-card">
+          <span className="auth-badge">
+            <MedicineBoxOutlined />
+          </span>
+          <Typography.Title level={3} style={{ margin: '16px 0 0' }}>
+            Set up your clinic
+          </Typography.Title>
+          <p className="auth-sub">One last step. You can add doctors and patients right after.</p>
+          <Form layout="vertical" size="large" onFinish={onFinish} requiredMark={false}>
+            <Form.Item name="name" label="Clinic name" rules={[{ required: true, message: 'Enter your clinic name' }]}>
+              <Input placeholder="Sunrise Dental Clinic" autoFocus />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" block loading={loading}>
+              Continue
+            </Button>
+          </Form>
+        </div>
+      </main>
     </div>
   )
 }

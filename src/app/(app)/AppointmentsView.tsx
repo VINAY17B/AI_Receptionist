@@ -3,8 +3,12 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import dayjs, { type Dayjs } from 'dayjs'
 import {
-  Button, Card, Col, DatePicker, Form, Input, InputNumber, Modal, Row, Select, Statistic, Table, TimePicker, Typography, message,
+  Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Segmented, Select, Table, Tag, TimePicker, Typography, message,
 } from 'antd'
+import {
+  CalendarOutlined, CheckCircleOutlined, ExclamationCircleOutlined, CloseCircleOutlined,
+  UserAddOutlined, RobotOutlined, LeftOutlined, RightOutlined, PlusOutlined,
+} from '@ant-design/icons'
 import { saveAppointment, setAppointmentStatus, type ApptStatus } from './appointments-actions'
 
 type Appt = {
@@ -18,7 +22,6 @@ type Appt = {
   source: string
   patients: { full_name: string; phone: string } | null
   doctors: { name: string } | null
-  
 }
 type Doctor = { id: string; name: string; slot_minutes: number }
 type PatientOpt = { id: string; full_name: string; phone: string }
@@ -40,13 +43,22 @@ const istDate = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { tim
 const istTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ })
 
-const STATUS_OPTIONS: { value: ApptStatus; label: string }[] = [
-  { value: 'booked', label: 'Booked' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
-  { value: 'no_show', label: 'No-show' },
-]
+const STATUS_META: Record<ApptStatus, { label: string; color: string }> = {
+  booked: { label: 'Booked', color: '#3b82f6' },
+  confirmed: { label: 'Confirmed', color: '#0d9488' },
+  completed: { label: 'Completed', color: '#16a34a' },
+  cancelled: { label: 'Cancelled', color: '#94a3b8' },
+  no_show: { label: 'No-show', color: '#dc2626' },
+}
+const STATUS_OPTIONS = (Object.keys(STATUS_META) as ApptStatus[]).map((value) => ({
+  value,
+  label: (
+    <span className="status-opt">
+      <i className="status-dot" style={{ background: STATUS_META[value].color }} />
+      {STATUS_META[value].label}
+    </span>
+  ),
+}))
 
 export default function AppointmentsView({
   date,
@@ -73,8 +85,8 @@ export default function AppointmentsView({
     [appointments, doctorFilter]
   )
 
-   const stats = useMemo(() => {
-   const count = (s: ApptStatus) => appointments.filter((a) => a.status === s).length
+  const stats = useMemo(() => {
+    const count = (s: ApptStatus) => appointments.filter((a) => a.status === s).length
     return {
       active: appointments.filter((a) => a.status !== 'cancelled').length,
       completed: count('completed'),
@@ -84,33 +96,39 @@ export default function AppointmentsView({
     }
   }, [appointments])
 
+  const isToday = dayjs(date).isSame(dayjs(), 'day')
+  const statTiles = [
+    { title: 'Appointments', value: stats.active, icon: <CalendarOutlined />, tone: 'teal' },
+    { title: 'Completed', value: stats.completed, icon: <CheckCircleOutlined />, tone: 'green' },
+    { title: 'No-shows', value: stats.noShow, icon: <ExclamationCircleOutlined />, tone: 'red' },
+    { title: 'Cancelled', value: stats.cancelled, icon: <CloseCircleOutlined />, tone: 'slate' },
+    { title: 'New patients', value: newPatients, icon: <UserAddOutlined />, tone: 'blue' },
+    { title: 'Booked by AI', value: stats.byAI, icon: <RobotOutlined />, tone: 'purple' },
+  ]
 
   const goTo = (d: Dayjs) => router.push(`/?date=${d.format('YYYY-MM-DD')}`)
 
   const openModal = (a: Appt | null) => {
     setEditing(a)
-    if (a) {
-      const mins = Math.round((new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60_000)
-      form.setFieldsValue({
-        patient_id: a.patient_id,
-        doctor_id: a.doctor_id,
-        date: dayjs(istDate(a.starts_at)),
-        time: dayjs(`2000-01-01 ${istTime(a.starts_at)}`),
-        duration: mins,
-        procedure: a.procedure ?? '',
-        status: a.status,
-      })
-    } else {
-      form.resetFields()
-      form.setFieldsValue({
+    setOpen(true)
+  }
+
+  const initialValues: Partial<FormValues> = editing
+    ? {
+        patient_id: editing.patient_id,
+        doctor_id: editing.doctor_id,
+        date: dayjs(istDate(editing.starts_at)),
+        time: dayjs(`2000-01-01 ${istTime(editing.starts_at)}`),
+        duration: Math.round((new Date(editing.ends_at).getTime() - new Date(editing.starts_at).getTime()) / 60_000),
+        procedure: editing.procedure ?? '',
+        status: editing.status,
+      }
+    : {
         date: dayjs(date),
         time: dayjs('2000-01-01 10:00'),
         duration: doctors[0]?.slot_minutes ?? 30,
         doctor_id: doctors.length === 1 ? doctors[0].id : undefined,
-      })
-    }
-    setOpen(true)
-  }
+      }
 
   const onSave = async () => {
     const v = await form.validateFields()
@@ -140,39 +158,51 @@ export default function AppointmentsView({
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          Appointments
-        </Typography.Title>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Button onClick={() => goTo(dayjs(date).subtract(1, 'day'))}>&lsaquo;</Button>
-          <DatePicker value={dayjs(date)} allowClear={false} onChange={(d) => d && goTo(d)} />
-          <Button onClick={() => goTo(dayjs(date).add(1, 'day'))}>&rsaquo;</Button>
+      <div className="page-head">
+        <div>
+          <Typography.Title level={3} style={{ margin: 0 }}>
+            Appointments
+          </Typography.Title>
+          <div className="page-sub">
+            {dayjs(date).format('dddd, D MMMM YYYY')}
+            {isToday && <Tag color="cyan" style={{ marginLeft: 8 }}>Today</Tag>}
+          </div>
+        </div>
+        <div className="toolbar">
+          <div className="date-nav">
+            <Button type="text" aria-label="Previous day" icon={<LeftOutlined />} onClick={() => goTo(dayjs(date).subtract(1, 'day'))} />
+            <DatePicker variant="borderless" value={dayjs(date)} allowClear={false} onChange={(d) => d && goTo(d)} />
+            <Button type="text" aria-label="Next day" icon={<RightOutlined />} onClick={() => goTo(dayjs(date).add(1, 'day'))} />
+          </div>
           <Button onClick={() => goTo(dayjs())}>Today</Button>
-          <Select
-            allowClear
-            placeholder="All doctors"
-            style={{ width: 180 }}
-            value={doctorFilter}
-            onChange={setDoctorFilter}
-            options={doctors.map((d) => ({ value: d.id, label: d.name }))}
-          />
-          <Button type="primary" disabled={missingSetup} onClick={() => openModal(null)}>
+          <Button type="primary" icon={<PlusOutlined />} disabled={missingSetup} onClick={() => openModal(null)}>
             Book appointment
           </Button>
         </div>
       </div>
-            
-    
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={12} md={4}><Card size="small"><Statistic title="Appointments" value={stats.active} /></Card></Col>
-        <Col xs={12} md={4}><Card size="small"><Statistic title="Completed" value={stats.completed} /></Card></Col>
-        <Col xs={12} md={4}><Card size="small"><Statistic title="No-shows" value={stats.noShow} /></Card></Col>
-        <Col xs={12} md={4}><Card size="small"><Statistic title="Cancelled" value={stats.cancelled} /></Card></Col>
-        <Col xs={12} md={4}><Card size="small"><Statistic title="New patients" value={newPatients} /></Card></Col>
-        <Col xs={12} md={4}><Card size="small"><Statistic title="Booked by AI" value={stats.byAI} /></Card></Col>
+
+      {doctors.length > 1 && (
+        <div className="chip-row">
+          <Segmented
+            value={doctorFilter ?? 'all'}
+            onChange={(v) => setDoctorFilter(v === 'all' ? undefined : String(v))}
+            options={[{ label: 'All doctors', value: 'all' }, ...doctors.map((d) => ({ label: d.name, value: d.id }))]}
+          />
+        </div>
+      )}
+
+      <div className="stat-grid">
+        {statTiles.map((s, i) => (
+          <div key={s.title} className={`stat-card tone-${s.tone}`} style={{ animationDelay: `${i * 60}ms` }}>
+            <span className="stat-icon">{s.icon}</span>
+            <div>
+              <div className="stat-value">{s.value}</div>
+              <div className="stat-title">{s.title}</div>
+            </div>
+          </div>
+        ))}
         {/* TODO: Revenue tile once the payments table exists (Week 4) */}
-      </Row>
+      </div>
 
       {missingSetup && (
         <Typography.Paragraph type="secondary">
@@ -180,46 +210,67 @@ export default function AppointmentsView({
         </Typography.Paragraph>
       )}
 
-      <Table<Appt>
-        rowKey="id"
-        dataSource={rows}
-        pagination={false}
-        locale={{ emptyText: 'No appointments on this day.' }}
-        rowClassName={(a) => (a.status === 'cancelled' ? 'appt-cancelled' : '')}
-        columns={[
-          {
-            title: 'Time',
-            render: (_, a) => `${fmtTime(a.starts_at)} – ${fmtTime(a.ends_at)}`,
-          },
-          { title: 'Patient', render: (_, a) => a.patients?.full_name ?? '-' },
-          { title: 'Phone', render: (_, a) => a.patients?.phone ?? '-' },
-          { title: 'Doctor', render: (_, a) => a.doctors?.name ?? '-' },
-          { title: 'Procedure', dataIndex: 'procedure', render: (v) => v ?? '-' },
-          { title: 'Source', dataIndex: 'source' },
-          {
-            title: 'Status',
-            render: (_, a) => (
-              <Select
-                size="small"
-                value={a.status}
-                style={{ width: 120 }}
-                options={STATUS_OPTIONS}
-                onChange={(s) => changeStatus(a, s)}
-              />
-            ),
-          },
-          {
-            title: '',
-            render: (_, a) => (
-              <Button size="small" onClick={() => openModal(a)}>
-                Edit
-              </Button>
-            ),
-          },
-        ]}
-      />
-
-      <style>{`.appt-cancelled td { opacity: 0.5; }`}</style>
+      <div className="surface" key={`${date}-${doctorFilter ?? 'all'}`}>
+        <Table<Appt>
+          rowKey="id"
+          dataSource={rows}
+          pagination={false}
+          scroll={{ x: 760 }}
+          locale={{ emptyText: <Empty description="No appointments on this day" style={{ padding: '32px 0' }} /> }}
+          rowClassName={(a) => `appt-row${a.status === 'cancelled' ? ' appt-cancelled' : ''}`}
+          onRow={(_, i) => ({ style: { animationDelay: `${Math.min(i ?? 0, 12) * 35}ms` } })}
+          columns={[
+            {
+              title: 'Time',
+              width: 200,
+              render: (_, a) => (
+                <span className="time-pill">{fmtTime(a.starts_at)} – {fmtTime(a.ends_at)}</span>
+              ),
+            },
+            {
+              title: 'Patient',
+              render: (_, a) => (
+                <div className="patient-cell">
+                  <span className="avatar">{(a.patients?.full_name ?? '?').charAt(0).toUpperCase()}</span>
+                  <div>
+                    <div className="patient-name">
+                      {a.patients?.full_name ?? '-'}
+                      {a.source !== 'manual' && (
+                        <Tag icon={<RobotOutlined />} color="purple" style={{ margin: 0 }}>{a.source}</Tag>
+                      )}
+                    </div>
+                    <div className="patient-phone">{a.patients?.phone ?? '-'}</div>
+                  </div>
+                </div>
+              ),
+            },
+            { title: 'Doctor', render: (_, a) => a.doctors?.name ?? '-' },
+            { title: 'Procedure', dataIndex: 'procedure', render: (v) => v ?? '-' },
+            {
+              title: 'Status',
+              width: 150,
+              render: (_, a) => (
+                <Select
+                  size="small"
+                  value={a.status}
+                  style={{ width: 130 }}
+                  options={STATUS_OPTIONS}
+                  onChange={(s) => changeStatus(a, s)}
+                />
+              ),
+            },
+            {
+              title: '',
+              width: 80,
+              render: (_, a) => (
+                <Button size="small" onClick={() => openModal(a)}>
+                  Edit
+                </Button>
+              ),
+            },
+          ]}
+        />
+      </div>
 
       <Modal
         title={editing ? 'Edit appointment' : 'Book appointment'}
@@ -228,12 +279,15 @@ export default function AppointmentsView({
         onCancel={() => setOpen(false)}
         confirmLoading={saving}
         okText="Save"
+        centered
+        width={560}
         destroyOnHidden
       >
         <Form
           form={form}
           layout="vertical"
           preserve={false}
+          initialValues={initialValues}
           onValuesChange={(changed) => {
             // New bookings: default the duration to the chosen doctor's slot length
             if (!editing && changed.doctor_id) {

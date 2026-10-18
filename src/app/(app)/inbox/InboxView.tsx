@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { Button, Empty, Input, List, Select, Tag, Typography, message as toast } from 'antd';
+import { Button, Empty, Input, Select, Tag, message as toast } from 'antd';
+import { ArrowLeftOutlined, MessageOutlined, SearchOutlined, SendOutlined } from '@ant-design/icons';
 import { createClient } from '@/lib/supabase/client'; // TODO: match your browser client export
 import { sendReply, setConversationStatus } from './actions';
 
@@ -23,9 +24,34 @@ type Msg = {
 };
 
 const OUTBOUND = 'out';
+const TZ = 'Asia/Kolkata';
 
-const statusColor = (s: string) =>
-  s === 'bot' ? 'green' : s === 'needs_human' ? 'orange' : 'default';
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  bot: { label: 'Bot handles', color: '#16a34a' },
+  needs_human: { label: 'Needs human', color: '#d97706' },
+  closed: { label: 'Closed', color: '#94a3b8' },
+};
+const meta = (s: string) => STATUS_META[s] ?? { label: s.replace('_', ' '), color: '#94a3b8' };
+
+const STATUS_OPTIONS = Object.entries(STATUS_META).map(([value, m]) => ({
+  value,
+  label: (
+    <span className="status-opt">
+      <i className="status-dot" style={{ background: m.color }} />
+      {m.label}
+    </span>
+  ),
+}));
+
+const nameOf = (c: Conv) => c.contact_name ?? c.external_id;
+const initialOf = (c: Conv) => nameOf(c).replace(/^\+/, '').charAt(0).toUpperCase() || '?';
+const dayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ });
+const dayLabel = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: TZ });
+const timeLabel = (iso: string) =>
+  new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: TZ });
+const listTime = (iso: string) =>
+  dayKey(iso) === dayKey(new Date().toISOString()) ? timeLabel(iso) : dayLabel(iso);
 
 export default function InboxView({ initialConversations }: { initialConversations: Conv[] }) {
   const supabase = useMemo(() => createClient(), []);
@@ -33,10 +59,17 @@ export default function InboxView({ initialConversations }: { initialConversatio
   const [activeId, setActiveId] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [draft, setDraft] = useState('');
+  const [query, setQuery] = useState('');
   const [pending, startTransition] = useTransition();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const active = convs.find((c) => c.id === activeId) ?? null;
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return convs;
+    return convs.filter((c) => nameOf(c).toLowerCase().includes(q) || c.external_id.includes(q));
+  }, [convs, query]);
 
   // Keep the conversation list fresh
   useEffect(() => {
@@ -109,74 +142,98 @@ export default function InboxView({ initialConversations }: { initialConversatio
   };
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 140px)', background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8 }}>
-      <div style={{ width: 320, overflow: 'auto', borderRight: '1px solid #f0f0f0' }}>
-        <List
-          dataSource={convs}
-          locale={{ emptyText: 'No conversations yet' }}
-          renderItem={(c) => (
-            <List.Item
-              onClick={() => setActiveId(c.id)}
-              style={{ cursor: 'pointer', padding: 12, background: c.id === activeId ? '#e6f4ff' : undefined }}
-            >
-              <List.Item.Meta
-                title={c.contact_name ?? c.external_id}
-                description={new Date(c.last_message_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
-              />
-              <Tag color={statusColor(c.status)}>{c.status.replace('_', ' ')}</Tag>
-            </List.Item>
+    <div className={`inbox${activeId ? ' has-active' : ''}`}>
+      <div className="inbox-list">
+        <div className="inbox-search">
+          <Input
+            allowClear
+            prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+            placeholder="Search conversations"
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <div className="inbox-items">
+          {visible.length === 0 ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={query.trim() ? 'No matches' : 'No conversations yet'}
+              style={{ padding: '40px 0' }}
+            />
+          ) : (
+            visible.map((c, i) => (
+              <div
+                key={c.id}
+                className={`conv${c.id === activeId ? ' active' : ''}`}
+                style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
+                onClick={() => setActiveId(c.id)}
+              >
+                <span className="avatar avatar-lg">{initialOf(c)}</span>
+                <div className="conv-body">
+                  <div className="conv-top">
+                    <span className="conv-name">{nameOf(c)}</span>
+                    <span className="conv-time">{listTime(c.last_message_at)}</span>
+                  </div>
+                  <div className="conv-bottom">
+                    <i className="status-dot" style={{ background: meta(c.status).color }} />
+                    {meta(c.status).label}
+                  </div>
+                </div>
+              </div>
+            ))
           )}
-        />
+        </div>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 16, minWidth: 0 }}>
+      <div className="chat">
         {!active ? (
-          <Empty description="Select a conversation" style={{ margin: 'auto' }} />
+          <Empty
+            image={<MessageOutlined style={{ fontSize: 44, color: '#cbd5e1' }} />}
+            description="Select a conversation to start"
+            style={{ margin: 'auto' }}
+          />
         ) : (
           <>
-            <Typography.Title level={5} style={{ marginTop: 0 }}>
-              {active.contact_name ?? active.external_id}
+            <div className="chat-head">
+              <Button className="back-btn" type="text" icon={<ArrowLeftOutlined />} onClick={() => setActiveId(null)} />
+              <span className="avatar avatar-lg">{initialOf(active)}</span>
+              <div className="chat-title">
+                <div className="patient-name">{nameOf(active)}</div>
+                <div className="patient-phone">{active.external_id}</div>
+              </div>
               {active.handoff_reason && (
-                <Tag color="red" style={{ marginLeft: 8 }}>
+                <Tag color="red" bordered={false} style={{ margin: 0 }}>
                   {active.handoff_reason}
                 </Tag>
               )}
               <Select
                 size="small"
-                style={{ marginLeft: 12, width: 130 }}
+                style={{ marginLeft: 'auto', width: 150 }}
                 value={active.status}
                 onChange={onStatusChange}
-                options={[
-                  { value: 'bot', label: 'Bot handles' },
-                  { value: 'needs_human', label: 'Needs human' },
-                  { value: 'closed', label: 'Closed' },
-                ]}
+                options={STATUS_OPTIONS}
               />
-            </Typography.Title>
+            </div>
 
-            <div style={{ flex: 1, overflow: 'auto' }}>
-              {msgs.map((m) => (
-                <div
-                  key={m.id}
-                  style={{ display: 'flex', justifyContent: m.direction === OUTBOUND ? 'flex-end' : 'flex-start', margin: '6px 0' }}
-                >
-                  <div
-                    style={{
-                      maxWidth: '70%',
-                      padding: '8px 12px',
-                      borderRadius: 12,
-                      whiteSpace: 'pre-wrap',
-                      background: m.direction === OUTBOUND ? '#d9f7be' : '#f5f5f5',
-                    }}
-                  >
-                    {m.body}
+            <div className="chat-scroll">
+              {msgs.map((m, i) => {
+                const out = m.direction === OUTBOUND;
+                const newDay = i === 0 || dayKey(msgs[i - 1].created_at) !== dayKey(m.created_at);
+                return (
+                  <div key={m.id}>
+                    {newDay && <div className="day-sep"><span>{dayLabel(m.created_at)}</span></div>}
+                    <div className={`bubble-row ${out ? 'out' : 'in'}`}>
+                      <div className="bubble">
+                        {m.body}
+                        <div className="bubble-time">{timeLabel(m.created_at)}</div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div ref={bottomRef} />
             </div>
 
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <div className="composer">
               <Input.TextArea
                 autoSize={{ minRows: 1, maxRows: 4 }}
                 value={draft}
@@ -189,9 +246,16 @@ export default function InboxView({ initialConversations }: { initialConversatio
                 }}
                 placeholder="Type a reply (Enter to send, Shift+Enter for new line)"
               />
-              <Button type="primary" loading={pending} onClick={onSend}>
-                Send
-              </Button>
+              <Button
+                type="primary"
+                shape="circle"
+                size="large"
+                icon={<SendOutlined />}
+                loading={pending}
+                disabled={!draft.trim()}
+                onClick={onSend}
+                aria-label="Send"
+              />
             </div>
           </>
         )}

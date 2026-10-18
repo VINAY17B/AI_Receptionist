@@ -16,8 +16,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
   const [{ data: appts }, { data: payments }] = await Promise.all([
     supabase
       .from('appointments')
-      .select('id, status, source, starts_at, doctors(full_name)') // TODO(verify): time column and doctor name column
-      .eq('patient_id', id)
+      .select('id, status, source, starts_at, doctors(name)')      .eq('patient_id', id)
       .order('starts_at', { ascending: false }), // TODO(verify): same time column
     supabase
       .from('payments')
@@ -38,7 +37,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
         status: a.status as string,
         source: a.source as string,
         starts_at: a.starts_at as string,
-        doctor_name: (a.doctors as unknown as { full_name: string } | null)?.full_name ?? '—',
+        doctor_name: (a.doctors as unknown as { name: string } | null)?.name ?? '—',
       }))}
       payments={payments ?? []}
       totalPaid={totalPaid}

@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { Button, Form, Input, InputNumber, Modal, Space, Switch, Table, Typography, message } from 'antd'
+import { Button, Empty, Form, Input, InputNumber, Modal, Switch, Table, Tag, Typography, message } from 'antd'
+import { ClockCircleOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { saveDoctor, setDoctorActive } from './actions'
 
 type Doctor = {
@@ -13,21 +14,23 @@ type Doctor = {
 
 type FormValues = { name: string; specialty?: string; slot_minutes: number }
 
+const initial = (name: string) => name.replace(/^dr\.?\s*/i, '').charAt(0).toUpperCase() || '?'
+
 export default function DoctorsTable({ doctors }: { doctors: Doctor[] }) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Doctor | null>(null)
   const [saving, setSaving] = useState(false)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
   const [form] = Form.useForm<FormValues>()
 
   const openModal = (doctor: Doctor | null) => {
     setEditing(doctor)
-    form.setFieldsValue(
-      doctor
-        ? { name: doctor.name, specialty: doctor.specialty ?? '', slot_minutes: doctor.slot_minutes }
-        : { name: '', specialty: '', slot_minutes: 30 }
-    )
     setOpen(true)
   }
+
+  const initialValues: FormValues = editing
+    ? { name: editing.name, specialty: editing.specialty ?? '', slot_minutes: editing.slot_minutes }
+    : { name: '', specialty: '', slot_minutes: 30 }
 
   const onSave = async () => {
     const values = await form.validateFields()
@@ -40,47 +43,87 @@ export default function DoctorsTable({ doctors }: { doctors: Doctor[] }) {
   }
 
   const toggleActive = async (d: Doctor, active: boolean) => {
+    setTogglingId(d.id)
     const res = await setDoctorActive(d.id, active)
+    setTogglingId(null)
     if (res.error) message.error(res.error)
   }
 
+  const activeCount = doctors.filter((d) => d.active).length
+
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          Doctors
-        </Typography.Title>
-        <Button type="primary" onClick={() => openModal(null)}>
+      <div className="page-head">
+        <div>
+          <Typography.Title level={3} style={{ margin: 0 }}>
+            Doctors
+          </Typography.Title>
+          <div className="page-sub">
+            {doctors.length === 0 ? 'No doctors yet' : `${activeCount} active of ${doctors.length}`}
+          </div>
+        </div>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal(null)}>
           Add doctor
         </Button>
       </div>
 
-      <Table<Doctor>
-        rowKey="id"
-        dataSource={doctors}
-        pagination={false}
-        locale={{ emptyText: 'No doctors yet. Add your first one.' }}
-        columns={[
-          { title: 'Name', dataIndex: 'name' },
-          { title: 'Specialty', dataIndex: 'specialty', render: (v) => v ?? '-' },
-          { title: 'Slot (min)', dataIndex: 'slot_minutes' },
-          {
-            title: 'Active',
-            dataIndex: 'active',
-            render: (_, d) => <Switch checked={d.active} onChange={(v) => toggleActive(d, v)} />,
-          },
-          {
-            title: '',
-            render: (_, d) => (
-              <Space>
-                <Button size="small" onClick={() => openModal(d)}>
+      <div className="surface">
+        <Table<Doctor>
+          rowKey="id"
+          dataSource={doctors}
+          pagination={false}
+          scroll={{ x: 620 }}
+          locale={{ emptyText: <Empty description="No doctors yet. Add your first one." style={{ padding: '32px 0' }} /> }}
+          rowClassName={(d) => `row-anim${d.active ? '' : ' row-inactive'}`}
+          onRow={(_, i) => ({ style: { animationDelay: `${Math.min(i ?? 0, 12) * 30}ms` } })}
+          columns={[
+            {
+              title: 'Doctor',
+              dataIndex: 'name',
+              render: (_, d) => (
+                <div className="patient-cell">
+                  <span className="avatar avatar-lg">{initial(d.name)}</span>
+                  <div>
+                    <div className="patient-name">{d.name}</div>
+                    <div className="patient-phone">{d.specialty ?? 'No specialty set'}</div>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              title: 'Slot length',
+              dataIndex: 'slot_minutes',
+              render: (v: number) => (
+                <span className="time-pill">
+                  <ClockCircleOutlined style={{ marginRight: 6 }} />
+                  {v} min
+                </span>
+              ),
+            },
+            {
+              title: 'Status',
+              dataIndex: 'active',
+              render: (_, d) => (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Switch checked={d.active} loading={togglingId === d.id} onChange={(v) => toggleActive(d, v)} />
+                  <Tag bordered={false} color={d.active ? 'green' : 'default'} style={{ margin: 0 }}>
+                    {d.active ? 'Active' : 'Inactive'}
+                  </Tag>
+                </div>
+              ),
+            },
+            {
+              title: '',
+              width: 90,
+              render: (_, d) => (
+                <Button size="small" icon={<EditOutlined />} onClick={() => openModal(d)}>
                   Edit
                 </Button>
-              </Space>
-            ),
-          },
-        ]}
-      />
+              ),
+            },
+          ]}
+        />
+      </div>
 
       <Modal
         title={editing ? 'Edit doctor' : 'Add doctor'}
@@ -89,9 +132,10 @@ export default function DoctorsTable({ doctors }: { doctors: Doctor[] }) {
         onCancel={() => setOpen(false)}
         confirmLoading={saving}
         okText="Save"
+        centered
         destroyOnHidden
       >
-        <Form form={form} layout="vertical" preserve={false}>
+        <Form form={form} layout="vertical" preserve={false} initialValues={initialValues}>
           <Form.Item name="name" label="Name" rules={[{ required: true, message: 'Enter the doctor name' }]}>
             <Input placeholder="Dr. Sharma" />
           </Form.Item>
