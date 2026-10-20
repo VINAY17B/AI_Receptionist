@@ -21,7 +21,12 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user && !request.nextUrl.pathname.startsWith('/login')) {
+  // Public paths: the login/sign-up page, the email-confirmation callback, and the Razorpay webhook
+  // (called by Razorpay's servers, which have no login; it checks its own signature).
+  const path = request.nextUrl.pathname
+  const isPublic =
+    path.startsWith('/login') || path.startsWith('/auth/') || path.startsWith('/api/razorpay/webhook')
+  if (!user && !isPublic) {
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = '/login'
     return NextResponse.redirect(loginUrl)

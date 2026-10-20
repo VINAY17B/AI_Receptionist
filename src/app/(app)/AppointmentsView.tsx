@@ -10,6 +10,7 @@ import {
   UserAddOutlined, RobotOutlined, LeftOutlined, RightOutlined, PlusOutlined,
 } from '@ant-design/icons'
 import { saveAppointment, setAppointmentStatus, type ApptStatus } from './appointments-actions'
+import { normalizeIndianPhone } from '@/lib/phone'
 
 type Appt = {
   id: string
@@ -27,7 +28,9 @@ type Doctor = { id: string; name: string; slot_minutes: number }
 type PatientOpt = { id: string; full_name: string; phone: string }
 
 type FormValues = {
-  patient_id: string
+  patient_id?: string
+  new_name?: string
+  new_phone?: string
   doctor_id: string
   date: Dayjs
   time: Dayjs
@@ -79,6 +82,7 @@ export default function AppointmentsView({
   const [editing, setEditing] = useState<Appt | null>(null)
   const [saving, setSaving] = useState(false)
   const [doctorFilter, setDoctorFilter] = useState<string | undefined>()
+  const [mode, setMode] = useState<'existing' | 'new'>('existing')
 
   const rows = useMemo(
     () => (doctorFilter ? appointments.filter((a) => a.doctor_id === doctorFilter) : appointments),
@@ -110,6 +114,7 @@ export default function AppointmentsView({
 
   const openModal = (a: Appt | null) => {
     setEditing(a)
+    setMode(patients.length === 0 ? 'new' : 'existing') // no patients yet: start on the walk-in form
     setOpen(true)
   }
 
@@ -135,7 +140,8 @@ export default function AppointmentsView({
     setSaving(true)
     const res = await saveAppointment({
       id: editing?.id,
-      patient_id: v.patient_id,
+      patient_id: mode === 'existing' ? v.patient_id : undefined,
+      new_patient: !editing && mode === 'new' ? { full_name: v.new_name ?? '', phone: v.new_phone ?? '' } : undefined,
       doctor_id: v.doctor_id,
       procedure: v.procedure,
       date: v.date.format('YYYY-MM-DD'),
@@ -145,7 +151,10 @@ export default function AppointmentsView({
     })
     setSaving(false)
     if (res.error) return message.error(res.error)
-    message.success(editing ? 'Appointment updated' : 'Appointment booked')
+    const reused = 'reused' in res && res.reused
+    message.success(
+      reused ? `Booked for existing patient ${reused} (same phone number)` : editing ? 'Appointment updated' : 'Appointment booked'
+    )
     setOpen(false)
   }
 
@@ -154,7 +163,7 @@ export default function AppointmentsView({
     if (res.error) message.error(res.error)
   }
 
-  const missingSetup = doctors.length === 0 || patients.length === 0
+  const missingSetup = doctors.length === 0
 
   return (
     <>
@@ -206,7 +215,7 @@ export default function AppointmentsView({
 
       {missingSetup && (
         <Typography.Paragraph type="secondary">
-          Add at least one active doctor and one patient before booking.
+          Add at least one active doctor before booking.
         </Typography.Paragraph>
       )}
 
@@ -296,14 +305,53 @@ export default function AppointmentsView({
             }
           }}
         >
-          <Form.Item name="patient_id" label="Patient" rules={[{ required: true, message: 'Select a patient' }]}>
-            <Select
-              showSearch
-              placeholder="Search by name or phone"
-              optionFilterProp="label"
-              options={patients.map((p) => ({ value: p.id, label: `${p.full_name} (${p.phone})` }))}
+          {!editing && (
+            <Segmented
+              block
+              value={mode}
+              onChange={(v) => setMode(v as 'existing' | 'new')}
+              options={[
+                { label: 'Existing patient', value: 'existing' },
+                { label: 'New patient (walk-in)', value: 'new' },
+              ]}
+              style={{ marginBottom: 16 }}
             />
-          </Form.Item>
+          )}
+          {mode === 'existing' || editing ? (
+            <Form.Item name="patient_id" label="Patient" rules={[{ required: true, message: 'Select a patient' }]}>
+              <Select
+                showSearch
+                placeholder="Search by name or phone"
+                optionFilterProp="label"
+                options={patients.map((p) => ({ value: p.id, label: `${p.full_name} (${p.phone})` }))}
+              />
+            </Form.Item>
+          ) : (
+            <>
+              <Form.Item
+                name="new_name"
+                label="Patient name"
+                rules={[{ required: true, whitespace: true, message: 'Enter the patient name' }, { max: 150 }]}
+              >
+                <Input autoFocus placeholder="Full name" />
+              </Form.Item>
+              <Form.Item
+                name="new_phone"
+                label="Mobile number"
+                rules={[
+                  { required: true, message: 'Enter the mobile number' },
+                  {
+                    validator: (_, v) =>
+                      !v || normalizeIndianPhone(v)
+                        ? Promise.resolve()
+                        : Promise.reject(new Error('Enter a valid 10-digit Indian mobile number')),
+                  },
+                ]}
+              >
+                <Input placeholder="98765 43210" inputMode="tel" />
+              </Form.Item>
+            </>
+          )}
           <Form.Item name="doctor_id" label="Doctor" rules={[{ required: true, message: 'Select a doctor' }]}>
             <Select options={doctors.map((d) => ({ value: d.id, label: d.name }))} />
           </Form.Item>

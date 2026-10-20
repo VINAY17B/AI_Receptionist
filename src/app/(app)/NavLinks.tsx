@@ -7,6 +7,7 @@ import {
   TeamOutlined,
   WalletOutlined,
   MessageOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 
 const items = [
@@ -15,6 +16,7 @@ const items = [
   { href: '/patients', label: 'Patients', icon: <TeamOutlined /> },
   { href: '/payments', label: 'Payments', icon: <WalletOutlined /> },
   { href: '/inbox', label: 'Inbox', icon: <MessageOutlined /> },
+  { href: '/clinic', label: 'Clinic', icon: <SettingOutlined /> },
 ]
 
 export default function NavLinks() {
