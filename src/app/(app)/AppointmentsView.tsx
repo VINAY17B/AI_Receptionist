@@ -21,6 +21,7 @@ type Appt = {
   ends_at: string
   status: ApptStatus
   source: string
+  cancel_reason: string | null
   patients: { full_name: string; phone: string } | null
   doctors: { name: string } | null
 }
@@ -37,6 +38,7 @@ type FormValues = {
   duration: number
   procedure?: string
   status?: ApptStatus
+  cancel_reason?: string
 }
 
 const TZ = 'Asia/Kolkata' // TODO: use the clinic's timezone
@@ -83,6 +85,10 @@ export default function AppointmentsView({
   const [saving, setSaving] = useState(false)
   const [doctorFilter, setDoctorFilter] = useState<string | undefined>()
   const [mode, setMode] = useState<'existing' | 'new'>('existing')
+  const [cancelTarget, setCancelTarget] = useState<Appt | null>(null)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelForm] = Form.useForm<{ reason: string }>()
+  const editStatus = Form.useWatch('status', form)
 
   const rows = useMemo(
     () => (doctorFilter ? appointments.filter((a) => a.doctor_id === doctorFilter) : appointments),
@@ -127,6 +133,7 @@ export default function AppointmentsView({
         duration: Math.round((new Date(editing.ends_at).getTime() - new Date(editing.starts_at).getTime()) / 60_000),
         procedure: editing.procedure ?? '',
         status: editing.status,
+        cancel_reason: editing.cancel_reason ?? '',
       }
     : {
         date: dayjs(date),
@@ -148,6 +155,7 @@ export default function AppointmentsView({
       time: v.time.format('HH:mm'),
       duration: v.duration,
       status: editing ? v.status : undefined,
+      cancel_reason: editing ? v.cancel_reason : undefined,
     })
     setSaving(false)
     if (res.error) return message.error(res.error)
@@ -159,8 +167,19 @@ export default function AppointmentsView({
   }
 
   const changeStatus = async (a: Appt, status: ApptStatus) => {
+    if (status === 'cancelled') return setCancelTarget(a) // confirm + reason first
     const res = await setAppointmentStatus(a.id, status)
     if (res.error) message.error(res.error)
+  }
+
+  const confirmCancel = async ({ reason }: { reason: string }) => {
+    if (!cancelTarget) return
+    setCancelling(true)
+    const res = await setAppointmentStatus(cancelTarget.id, 'cancelled', reason)
+    setCancelling(false)
+    if (res.error) return message.error(res.error)
+    message.success('Appointment cancelled')
+    setCancelTarget(null)
   }
 
   const missingSetup = doctors.length === 0
@@ -254,7 +273,18 @@ export default function AppointmentsView({
               ),
             },
             { title: 'Doctor', render: (_, a) => a.doctors?.name ?? '-' },
-            { title: 'Procedure', dataIndex: 'procedure', render: (v) => v ?? '-' },
+            {
+              title: 'Procedure',
+              dataIndex: 'procedure',
+              render: (v, a) => (
+                <>
+                  <div>{v ?? '-'}</div>
+                  {a.status === 'cancelled' && a.cancel_reason && (
+                    <div className="cancel-reason">Reason: {a.cancel_reason}</div>
+                  )}
+                </>
+              ),
+            },
             {
               title: 'Status',
               width: 150,
@@ -379,6 +409,41 @@ export default function AppointmentsView({
               <Select options={STATUS_OPTIONS} />
             </Form.Item>
           )}
+          {editing && editStatus === 'cancelled' && (
+            <Form.Item
+              name="cancel_reason"
+              label="Cancellation reason"
+              rules={[{ required: true, whitespace: true, message: 'Please enter a reason' }, { max: 200 }]}
+            >
+              <Input.TextArea rows={2} maxLength={200} showCount />
+            </Form.Item>
+          )}
+        </Form>
+      </Modal>
+
+      <Modal
+        title="Cancel this appointment?"
+        open={!!cancelTarget}
+        centered
+        okText="Cancel appointment"
+        cancelText="Keep appointment"
+        okButtonProps={{ danger: true, loading: cancelling }}
+        onOk={() => cancelForm.submit()}
+        onCancel={() => setCancelTarget(null)}
+        destroyOnHidden
+      >
+        <p style={{ marginBottom: 16 }}>
+          {cancelTarget?.patients?.full_name ?? '-'} with {cancelTarget?.doctors?.name ?? '-'}
+          {cancelTarget && ` at ${fmtTime(cancelTarget.starts_at)}`}
+        </p>
+        <Form form={cancelForm} layout="vertical" preserve={false} onFinish={confirmCancel}>
+          <Form.Item
+            name="reason"
+            label="Reason for cancellation"
+            rules={[{ required: true, whitespace: true, message: 'Please enter a reason' }, { max: 200 }]}
+          >
+            <Input.TextArea autoFocus rows={3} maxLength={200} showCount />
+          </Form.Item>
         </Form>
       </Modal>
     </>

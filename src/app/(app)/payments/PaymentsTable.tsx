@@ -44,7 +44,10 @@ export default function PaymentsTable({
   }) => {
     startTransition(async () => {
       const res = await addPayment(values);
-      if (res.error) return toast.error(res.error);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
       toast.success('Payment added');
       form.resetFields();
       setOpen(false);

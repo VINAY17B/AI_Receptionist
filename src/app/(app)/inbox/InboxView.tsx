@@ -208,7 +208,7 @@ export default function InboxView({ initialConversations }: { initialConversatio
               <Select
                 size="small"
                 style={{ marginLeft: 'auto', width: 150 }}
-                value={active.status}
+                value={active.status as 'bot' | 'needs_human' | 'closed'}
                 onChange={onStatusChange}
                 options={STATUS_OPTIONS}
               />

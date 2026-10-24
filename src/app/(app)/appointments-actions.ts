@@ -37,6 +37,7 @@ export async function saveAppointment(input: {
   time: string // HH:mm
   duration: number
   status?: ApptStatus
+  cancel_reason?: string
 }) {
   const { supabase, clinicId } = await getClinicContext()
 
@@ -47,6 +48,10 @@ export async function saveAppointment(input: {
     return { error: 'Duration must be between 5 and 480 minutes' }
   }
   if (input.status && !STATUSES.includes(input.status)) return { error: 'Invalid status' }
+
+  const reason = input.cancel_reason?.trim() || null
+  if (input.status === 'cancelled' && !reason) return { error: 'Cancellation reason is required' }
+  if (reason && reason.length > 200) return { error: 'Reason is too long (max 200 characters)' }
 
   const starts = new Date(`${input.date}T${input.time}:00${IST_OFFSET}`)
   if (isNaN(starts.getTime())) return { error: 'Invalid date or time' }
@@ -101,7 +106,11 @@ export async function saveAppointment(input: {
   const { error } = input.id
     ? await supabase
         .from('appointments')
-        .update(input.status ? { ...row, status: input.status } : row)
+        .update(
+          input.status
+            ? { ...row, status: input.status, cancel_reason: input.status === 'cancelled' ? reason : null }
+            : row
+        )
         .eq('id', input.id)
     : await supabase
         .from('appointments')
@@ -118,10 +127,16 @@ export async function saveAppointment(input: {
   return { error: null, reused: reusedName }
 }
 
-export async function setAppointmentStatus(id: string, status: ApptStatus) {
+export async function setAppointmentStatus(id: string, status: ApptStatus, cancelReason?: string) {
   const { supabase } = await getClinicContext()
   if (!STATUSES.includes(status)) return { error: 'Invalid status' }
-  const { error } = await supabase.from('appointments').update({ status }).eq('id', id)
+  const reason = cancelReason?.trim() || null
+  if (status === 'cancelled' && !reason) return { error: 'Cancellation reason is required' }
+  if (reason && reason.length > 200) return { error: 'Reason is too long (max 200 characters)' }
+  const { error } = await supabase
+    .from('appointments')
+    .update({ status, cancel_reason: status === 'cancelled' ? reason : null })
+    .eq('id', id)
   if (error) return { error: friendlyError(error) }
   revalidatePath('/')
   return { error: null }

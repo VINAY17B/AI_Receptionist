@@ -26,7 +26,7 @@ export default async function Home({
     supabase
       .from('appointments')
       .select(
-        'id, patient_id, doctor_id, procedure, starts_at, ends_at, status, source, patients(full_name, phone), doctors(name)'
+        'id, patient_id, doctor_id, procedure, starts_at, ends_at, status, source, cancel_reason, patients(full_name, phone), doctors(name)'
       )
       .gte('starts_at', dayStart.toISOString())
       .lt('starts_at', dayEnd.toISOString())
