@@ -21,11 +21,11 @@ export async function sendReply(conversationId: string, body: string) {
 
   let res: Response;
   try {
-    res = await fetch(`${process.env.BOT_URL}/send`, {
+    res = await fetch(`${process.env.DEV_BOT_URL}/send`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Internal-Key': process.env.BOT_INTERNAL_KEY ?? '',
+        'X-Internal-Key': process.env.DEV_BOT_INTERNAL_KEY ?? '',
       },
       body: JSON.stringify({ conversation_id: conv.id, body: text }),
       cache: 'no-store',
